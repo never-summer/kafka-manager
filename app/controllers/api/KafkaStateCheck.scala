@@ -5,15 +5,22 @@
 
 package controllers.api
 
+import java.util.Properties
+
 import controllers.KafkaManagerContext
 import features.ApplicationFeatures
 import models.navigation.Menus
-import play.api.i18n.{ I18nSupport, MessagesApi }
+import org.apache.kafka.clients.consumer.KafkaConsumer
+import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json._
 import play.api.mvc._
+
 import scala.concurrent.Future
 import org.json4s.jackson.Serialization
 import org.json4s.scalaz.JsonScalaz.toJSON
+import org.apache.kafka.clients.consumer.KafkaConsumer
+
+import scala.collection.JavaConversions._
 
 /**
  * @author jisookim0513
@@ -128,5 +135,32 @@ class KafkaStateCheck (val messagesApi: MessagesApi, val kafkaManagerContext: Ka
         )
     }
   }
+  def echo(topic: String) = Action { request =>
+      val consumer = {
+        val props = getProperties(servers = "localhost:9092", groupId = "test02")
+        new KafkaConsumer[String, String](props)
+      }
+      // Subscribe to one topic
+      consumer.subscribe(List(topic))
+      consumer.poll(0)
+      var sumOffset = 0l
+      consumer.assignment().foreach { tp =>
+        consumer.seekToEnd(tp)
+        sumOffset += consumer.position(tp)
+      }
+      consumer.close()
+      Ok("sumOffset:" + sumOffset)
+  }
 
+  def getProperties(servers: String, groupId: String): Properties = {
+    val props = new Properties()
+    props.put("bootstrap.servers", servers)
+    props.put("group.id", groupId)
+    props.put("enable.auto.commit", "true")
+    props.put("auto.commit.interval.ms", "1000")
+    props.put("session.timeout.ms", "30000")
+    props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+    props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+    props
+  }
 }
