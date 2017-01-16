@@ -238,6 +238,7 @@ object KafkaMetrics {
 
   private def parseLogSegment(str: String): LogSegment = {
     try {
+      System.out.println("!!!!!!!!!!!!!! str:"+str)
       val matches = LogSegmentRegex.findAllIn(str).matchData.toSeq
       require(matches.size == 1)
       val m = matches.head

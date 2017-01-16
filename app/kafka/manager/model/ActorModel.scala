@@ -10,6 +10,7 @@ import java.util.Properties
 import grizzled.slf4j.Logging
 import kafka.common.TopicAndPartition
 import kafka.manager.jmx._
+import kafka.manager.model.ActorModel.TopicIdentity.logger
 import kafka.manager.utils
 import kafka.manager.utils.zero81.ForceReassignmentCommand
 import org.joda.time.DateTime
@@ -363,7 +364,7 @@ import scala.language.reflectiveCalls
                            config: List[(String,String)],
                            clusterContext: ClusterContext,
                            metrics: Option[BrokerMetrics] = None,
-                           size: Option[String] = None) {
+                           size: Option[String] = None) extends Logging {
 
     val replicationFactor : Int = partitionsIdentity.head._2.replicas.size
 
@@ -381,8 +382,12 @@ import scala.language.reflectiveCalls
       }.toIndexedSeq.sortBy(_.id)
     }
 
+
     // a topic's log-size is the sum of its partitions' log-sizes, we take the sum of the ones we know the offset for.
     val summedTopicOffsets : Long = partitionsIdentity.map(_._2.latestOffset).collect{case Some(offset) => offset}.sum
+   // logger.info ("!!!!!!!!!!!!!!!!!!  summedTopicOffsets:"+summedTopicOffsets)
+   // logger.info ("!!!!!!!!!!!!!!!!!!  partitionsIdentity:"+partitionsIdentity)
+
 
     val preferredReplicasPercentage : Int = (100 * partitionsIdentity.count(_._2.isPreferredLeader)) / partitions
 
@@ -455,6 +460,7 @@ import scala.language.reflectiveCalls
                                                 tpSizes: Map[Int, Map[Int, Long]]) : Map[Int, TopicPartitionIdentity] = {
 
       val stateMap = td.partitionState.getOrElse(Map.empty)
+
       // Assign the partition data to the TPI format
       partMap.map { case (partition, replicas) =>
         val partitionNum = partition.toInt
@@ -481,6 +487,10 @@ import scala.language.reflectiveCalls
           previousOffsets <- previousPartitionOffsets
           result <- PartitionOffsetsCapture.getRate(partitionNum, currentOffsets, previousOffsets)
         } yield result
+
+        logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getTopicPartitionIdentity:"+TopicIdentity)
+        logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! currentOffsets:"+partitionOffsets)
+        logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! previousPartitionOffsets:"+previousPartitionOffsets)
 
         (partitionNum,TopicPartitionIdentity.from(partitionNum,
           stateMap.get(partition),
