@@ -1,7 +1,7 @@
 /**
- * Copyright 2015 Yahoo Inc. Licensed under the Apache License, Version 2.0
- * See accompanying LICENSE file.
- */
+  * Copyright 2015 Yahoo Inc. Licensed under the Apache License, Version 2.0
+  * See accompanying LICENSE file.
+  */
 
 package kafka.manager.jmx
 
@@ -9,13 +9,13 @@ import java.io.File
 import java.{util => ju}
 import javax.management._
 import javax.management.remote.rmi.RMIConnectorServer
-import javax.management.remote.{JMXConnectorFactory, JMXServiceURL, JMXConnector}
+import javax.management.remote.{JMXConnector, JMXConnectorFactory, JMXServiceURL}
 import javax.naming.Context
 import javax.rmi.ssl.SslRMIClientSocketFactory
 
 import com.yammer.metrics.reporting.JmxReporter.GaugeMBean
 import grizzled.slf4j.Logging
-import kafka.manager.model.{Kafka_0_8_1_1, KafkaVersion, ActorModel}
+import kafka.manager.model.{ActorModel, KafkaVersion, Kafka_0_8_1_1, Kafka_0_9_0_0}
 import ActorModel.BrokerMetrics
 
 import scala.collection.JavaConverters._
@@ -23,8 +23,8 @@ import scala.util.matching.Regex
 import scala.util.{Failure, Try}
 
 object KafkaJMX extends Logging {
-  
-  private[this] val defaultJmxConnectorProperties = Map[String, Any] (
+
+  private[this] val defaultJmxConnectorProperties = Map[String, Any](
     "jmx.remote.x.request.waiting.timeout" -> "3000",
     "jmx.remote.x.notification.fetch.timeout" -> "3000",
     "sun.rmi.transport.connectionTimeout" -> "3000",
@@ -32,7 +32,7 @@ object KafkaJMX extends Logging {
     "sun.rmi.transport.tcp.responseTimeout" -> "3000"
   )
 
-  def doWithConnection[T](jmxHost: String, jmxPort: Int, jmxUser: Option[String], jmxPass: Option[String], jmxSsl: Boolean)(fn: MBeanServerConnection => T) : Try[T] = {
+  def doWithConnection[T](jmxHost: String, jmxPort: Int, jmxUser: Option[String], jmxPass: Option[String], jmxSsl: Boolean)(fn: MBeanServerConnection => T): Try[T] = {
     val urlString = s"service:jmx:rmi:///jndi/rmi://$jmxHost:$jmxPort/jmxrmi"
     val url = new JMXServiceURL(urlString)
     try {
@@ -64,13 +64,13 @@ object KafkaJMX extends Logging {
       }
     } catch {
       case e: Exception =>
-        logger.error(s"Failed to connect to $urlString",e)
+        logger.error(s"Failed to connect to $urlString", e)
         Failure(e)
     }
   }
 }
 
-object KafkaMetrics {
+object KafkaMetrics extends Logging {
 
   def getBytesInPerSec(kafkaVersion: KafkaVersion, mbsc: MBeanServerConnection, topicOption: Option[String] = None) = {
     getBrokerTopicMeterMetrics(kafkaVersion, mbsc, "BytesInPerSec", topicOption)
@@ -97,10 +97,14 @@ object KafkaMetrics {
   }
 
   private def getBrokerTopicMeterMetrics(kafkaVersion: KafkaVersion, mbsc: MBeanServerConnection, metricName: String, topicOption: Option[String]) = {
+    //logger.info("!!!!!!!!!!!!!!!!!!!!!  getObjectName(kafkaVersion, metricName, topicOption):" + getObjectName(kafkaVersion, metricName, topicOption))
+    //logger.info("!!!!!!!!!!!!!!!!!!!!!  getObjectNametopicOption:" + topicOption)
+    //logger.info("!!!!!!!!!!!!!!!!!!!!!  getObjectName metricName:" + metricName)
+    //logger.info("!!!!!!!!!!!!!!!!!!!!!  getObjectName kafkaVersion:" + kafkaVersion)
     getMeterMetric(mbsc, getObjectName(kafkaVersion, metricName, topicOption))
   }
-  
-  private def getSep(kafkaVersion: KafkaVersion) : String = {
+
+  private def getSep(kafkaVersion: KafkaVersion): String = {
     kafkaVersion match {
       case Kafka_0_8_1_1 => "\""
       case _ => ""
@@ -110,8 +114,8 @@ object KafkaMetrics {
   def getObjectName(kafkaVersion: KafkaVersion, name: String, topicOption: Option[String] = None) = {
     val sep = getSep(kafkaVersion)
     val topicAndName = kafkaVersion match {
-      case Kafka_0_8_1_1 => 
-        topicOption.map( topic => s"${sep}$topic-$name${sep}").getOrElse(s"${sep}AllTopics$name${sep}")
+      case Kafka_0_8_1_1 =>
+        topicOption.map(topic => s"${sep}$topic-$name${sep}").getOrElse(s"${sep}AllTopics$name${sep}")
       case _ =>
         val topicProp = topicOption.map(topic => s",topic=$topic").getOrElse("")
         s"$name$topicProp"
@@ -127,11 +131,11 @@ object KafkaMetrics {
   /* Gauge, Value : 0 */
   private val replicaFetcherManagerMaxLag = new ObjectName(
     "kafka.server:type=ReplicaFetcherManager,name=MaxLag,clientId=Replica")
-  
+
   /* Gauge, Value : 0 */
   private val kafkaControllerActiveControllerCount = new ObjectName(
     "kafka.controller:type=KafkaController,name=ActiveControllerCount")
-  
+
   /* Gauge, Value : 0 */
   private val kafkaControllerOfflinePartitionsCount = new ObjectName(
     "kafka.controller:type=KafkaController,name=OfflinePartitionsCount")
@@ -172,22 +176,24 @@ object KafkaMetrics {
       case _: InstanceNotFoundException => OSMetric(0D, 0D)
     }
   }
-  
+
   private def getMeterMetric(mbsc: MBeanServerConnection, name: ObjectName) = {
     import scala.collection.JavaConverters._
     try {
       val attributeList = mbsc.getAttributes(name, Array("Count", "FifteenMinuteRate", "FiveMinuteRate", "OneMinuteRate", "MeanRate"))
       val attributes = attributeList.asList().asScala.toSeq
+      //logger.info("!!!!!!!!!!!!!!!!!! attributeList:" + attributeList)
+      //logger.info("!!!!!!!!!!!!!!!!!! attributes:" + attributes)
       MeterMetric(getLongValue(attributes, "Count"),
         getDoubleValue(attributes, "FifteenMinuteRate"),
         getDoubleValue(attributes, "FiveMinuteRate"),
         getDoubleValue(attributes, "OneMinuteRate"),
         getDoubleValue(attributes, "MeanRate"))
     } catch {
-        case _: InstanceNotFoundException => MeterMetric(0,0,0,0,0)
-      }
+      case _: InstanceNotFoundException => MeterMetric(0, 0, 0, 0, 0)
+    }
   }
-  
+
   private def getLongValue(attributes: Seq[Attribute], name: String) = {
     attributes.find(_.getName == name).map(_.getValue.asInstanceOf[Long]).getOrElse(0L)
   }
@@ -214,11 +220,11 @@ object KafkaMetrics {
   }
 
   private def queryValues[K, V](
-    mbsc: MBeanServerConnection,
-    objectName: ObjectName,
-    keyConverter: String => K,
-    valueConverter: Object => V
-    ) = {
+                                 mbsc: MBeanServerConnection,
+                                 objectName: ObjectName,
+                                 keyConverter: String => K,
+                                 valueConverter: Object => V
+                               ) = {
     val logsSizeObjectNames = mbsc.queryNames(objectName, null).asScala.toSeq
     logsSizeObjectNames.par.map {
       objectName => queryValue(mbsc, objectName, keyConverter, valueConverter)
@@ -226,11 +232,11 @@ object KafkaMetrics {
   }
 
   private def queryValue[K, V](
-    mbsc: MBeanServerConnection,
-    objectName: ObjectName,
-    keyConverter: String => K,
-    valueConverter: Object => V
-    ) = {
+                                mbsc: MBeanServerConnection,
+                                objectName: ObjectName,
+                                keyConverter: String => K,
+                                valueConverter: Object => V
+                              ) = {
     val name = objectName.getKeyProperty("name")
     val mbean = MBeanServerInvocationHandler.newProxyInstance(mbsc, objectName, classOf[GaugeMBean], true)
     (keyConverter(name), valueConverter(mbean.getValue))
@@ -267,6 +273,32 @@ object KafkaMetrics {
       )
     }.toMap
 
+//    //kafka.log:type=Log,name=LogEndOffset,topic=anritsu2_ADR_CNT_Belgorod_14139,partition=1
+//    val opt = Some("polystar_sib_decode")
+//    //val objName = getObjectName(Kafka_0_9_0_0, "kafka.log:type=Log,name=LogEndOffset", opt)
+//    //val objName = new ObjectName(s"kafka.log:type=Log,name=LogEndOffset,topic=polystar_sib_decode_avro,partition=1")
+//    val objName2 = new ObjectName(s"kafka.log:type=Log,name=LogEndOffset,topic=polystar_sib_decode_avro,partition=*")
+//
+//    //logger.info(" getObjectName(kafkaVersion, metricName, topicOption):" + objName)
+//    import scala.collection.JavaConverters._
+//    try {
+//
+//      val attributeList2 = mbsc.queryNames(objName2, null).asScala.toSeq
+//      var sum = 0l;
+//      for (obj <- attributeList2) {
+//        logger.info("attributeList:" + obj)
+//        val objName = new ObjectName(String.valueOf(obj))
+//        logger.info("objName" + objName)
+//        val attributeList = mbsc.getAttributes(objName, Array("Value"))
+//        logger.info("attributeListValue:" + attributeList)
+//      }
+//      logger.info("\n\n\n\n\n");
+//      //attributeList.forEach( new ObjectName(_) )
+//    } catch {
+//      case _: InstanceNotFoundException => OSMetric(0D, 0D)
+//    }
+
+
     val directoryMap = {
       queryValues(
         mbsc,
@@ -281,19 +313,19 @@ object KafkaMetrics {
       directory <- directoryMap.get(key);
       logSegments <- logSegmentsMap.get(key)
     ) yield {
-        val directoryFile = new File(directory)
-        val dir = directoryFile.getParentFile.getAbsolutePath
+      val directoryFile = new File(directory)
+      val dir = directoryFile.getParentFile.getAbsolutePath
 
-        val (topic, partition) = key
+      val (topic, partition) = key
 
-        (topic, (partition, LogInfo(dir, logSegments)))
-      }
+      (topic, (partition, LogInfo(dir, logSegments)))
+    }
 
     stats.groupBy(_._1).mapValues(_.map(_._2).toMap).toMap
   }
 
   // return broker metrics with segment metric only when it's provided. if not, it will contain segment metric with value 0L
-  def getBrokerMetrics(kafkaVersion: KafkaVersion, mbsc: MBeanServerConnection, segmentsMetric: Option[SegmentsMetric] = None, topic: Option[String] = None) : BrokerMetrics = {
+  def getBrokerMetrics(kafkaVersion: KafkaVersion, mbsc: MBeanServerConnection, segmentsMetric: Option[SegmentsMetric] = None, topic: Option[String] = None): BrokerMetrics = {
     BrokerMetrics(
       KafkaMetrics.getBytesInPerSec(kafkaVersion, mbsc, topic),
       KafkaMetrics.getBytesOutPerSec(kafkaVersion, mbsc, topic),
@@ -322,7 +354,7 @@ case class OSMetric(processCpuLoad: Double,
 }
 
 case class SegmentsMetric(bytes: Long) {
-  def +(o: SegmentsMetric) : SegmentsMetric = {
+  def +(o: SegmentsMetric): SegmentsMetric = {
     SegmentsMetric(o.bytes + bytes)
   }
 
@@ -332,10 +364,10 @@ case class SegmentsMetric(bytes: Long) {
 }
 
 case class MeterMetric(count: Long,
-                      fifteenMinuteRate: Double,
-                      fiveMinuteRate: Double,
-                      oneMinuteRate: Double,
-                      meanRate: Double) {
+                       fifteenMinuteRate: Double,
+                       fiveMinuteRate: Double,
+                       oneMinuteRate: Double,
+                       meanRate: Double) {
 
   def formatFifteenMinuteRate = {
     FormatMetric.rateFormat(fifteenMinuteRate, 0)
@@ -353,12 +385,12 @@ case class MeterMetric(count: Long,
     FormatMetric.rateFormat(meanRate, 0)
   }
 
-  def +(o: MeterMetric) : MeterMetric = {
+  def +(o: MeterMetric): MeterMetric = {
     MeterMetric(
-      o.count + count, 
-      o.fifteenMinuteRate + fifteenMinuteRate, 
-      o.fiveMinuteRate + fiveMinuteRate, 
-      o.oneMinuteRate + oneMinuteRate, 
+      o.count + count,
+      o.fifteenMinuteRate + fifteenMinuteRate,
+      o.fiveMinuteRate + fiveMinuteRate,
+      o.oneMinuteRate + oneMinuteRate,
       o.meanRate + meanRate)
   }
 }
@@ -369,10 +401,10 @@ case class LogInfo(dir: String, logSegments: Seq[LogSegment]) {
 }
 
 case class LogSegment(
-  baseOffset: Long,
-  created: Long,
-  logBytes: Long,
-  indexBytes: Long) {
+                       baseOffset: Long,
+                       created: Long,
+                       logBytes: Long,
+                       indexBytes: Long) {
 
   val bytes = logBytes + indexBytes
 }
@@ -410,7 +442,7 @@ object FormatMetric {
       bytes + " B"
     } else {
       val exp = (math.log(bytes) / math.log(unit)).toInt
-      val pre = "kMGTPE".charAt(exp-1)
+      val pre = "kMGTPE".charAt(exp - 1)
       "%.1f %sB".format(bytes / math.pow(unit, exp), pre)
     }
   }
