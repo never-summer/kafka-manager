@@ -9,6 +9,7 @@ import java.util.Properties
 
 import controllers.KafkaManagerContext
 import features.ApplicationFeatures
+import kafka.manager.model.ActorModel.BrokerIdentity
 import models.navigation.Menus
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import play.api.i18n.{I18nSupport, MessagesApi}
@@ -135,32 +136,61 @@ class KafkaStateCheck (val messagesApi: MessagesApi, val kafkaManagerContext: Ka
         )
     }
   }
-  def echo(topic: String) = Action { request =>
-      val consumer = {
-        val props = getProperties(servers = "localhost:9092", groupId = "test02")
-        new KafkaConsumer[String, String](props)
-      }
-      // Subscribe to one topic
-      consumer.subscribe(List(topic))
-      consumer.poll(0)
-      var sumOffset = 0l
-      consumer.assignment().foreach { tp =>
-        consumer.seekToEnd(tp)
-        sumOffset += consumer.position(tp)
-      }
-      consumer.close()
-      Ok("sumOffset:" + sumOffset)
+  def getTopicSummary(c: String,t: String) = Action.async { implicit request =>
+    implicit val formats = org.json4s.DefaultFormats
+    kafkaManager.getTopicIdentity(c, t).map { errorOrTopicIdentity =>
+      errorOrTopicIdentity.fold(
+        error => BadRequest(Json.obj("error" -> error.msg)),
+        topicIdentity => Ok(Serialization.writePretty("topic" -> t, "bytesInPerSec" -> topicIdentity.metrics.get.bytesInPerSec, "bytesOutPerSec" -> topicIdentity.metrics.get.bytesOutPerSec, "bytesRejectedPerSec" -> topicIdentity.metrics.get.bytesRejectedPerSec, "failedFetchRequestsPerSec" -> topicIdentity.metrics.get.failedFetchRequestsPerSec, "failedProduceRequestsPerSec" -> topicIdentity.metrics.get.failedProduceRequestsPerSec, "messagesInPerSec" -> topicIdentity.metrics.get.messagesInPerSec ))
+      )
+    }
   }
 
-  def getProperties(servers: String, groupId: String): Properties = {
-    val props = new Properties()
-    props.put("bootstrap.servers", servers)
-    props.put("group.id", groupId)
-    props.put("enable.auto.commit", "true")
-    props.put("auto.commit.interval.ms", "1000")
-    props.put("session.timeout.ms", "30000")
-    props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
-    props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
-    props
+  def getBrokerSummary(c: String) = Action.async { implicit request =>
+    implicit val formats = org.json4s.DefaultFormats
+    kafkaManager.getBrokerList(c).map { errorOrTopicIdentity =>
+      errorOrTopicIdentity.fold(
+        error => BadRequest(Json.obj("error" -> error.msg)),
+        brokerIdentity => Ok(Serialization.writePretty( brokerIdentity.list.map(x => Map("broker" -> brokerIdentity.metrics.get(x.id)
+//          "messagesInPerSec"->brokerIdentity.metrics.get(x.id).get.messagesInPerSec,
+//          "bytesOutPerSec"->brokerIdentity.metrics.get(x.id).get.bytesOutPerSec,
+//          "bytesInPerSec"->brokerIdentity.metrics.get(x.id).get.bytesInPerSec
+        ))
+          ))
+      )
+    }
   }
+  def getTopicSumOffset(c: String,t: String) = Action { implicit request =>
+    implicit val formats = org.json4s.DefaultFormats
+    Ok(Json.obj("topic" -> t, "offsetSum" -> kafkaManager.getSumOffsetTopic(c, t)))
+  }
+  //getSumOffsetTopic
+//  def echo(topic: String) = Action { request =>
+//      val consumer = {
+//        val props = getProperties(servers = "localhost:9092", groupId = "test02")
+//        new KafkaConsumer[String, String](props)
+//      }
+//      // Subscribe to one topic
+//      consumer.subscribe(List(topic))
+//      consumer.poll(0)
+//      var sumOffset = 0l
+//      consumer.assignment().foreach { tp =>
+//        consumer.seekToEnd(tp)
+//        sumOffset += consumer.position(tp)
+//      }
+//      consumer.close()
+//      Ok("sumOffset:" + sumOffset)
+//  }
+//
+//  def getProperties(servers: String, groupId: String): Properties = {
+//    val props = new Properties()
+//    props.put("bootstrap.servers", servers)
+//    props.put("group.id", groupId)
+//    props.put("enable.auto.commit", "true")
+//    props.put("auto.commit.interval.ms", "1000")
+//    props.put("session.timeout.ms", "30000")
+//    props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+//    props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+//    props
+//  }
 }
